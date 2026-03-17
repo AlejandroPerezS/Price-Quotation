@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; background-color: #f0f4f8; display: flex; justify-content: center; align-items: center; height: 100vh;">
+
+<div style="background-color: #ffffff; padding: 30px 40px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); max-width: 400px; width: 100%; text-align: center;">
+
+  <h2 style="color: #1e90ff; margin-bottom: 20px;">Price Quote</h2>
+
+  <form id="quoteForm" style="display: flex; flex-direction: column; gap: 15px;">
+    <input type="text" id="item" placeholder="Item Name" style="padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px;">
+    <input type="text" id="brand" placeholder="Brand" style="padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px;">
+    <button type="submit" style="padding: 12px; border-radius: 6px; border: none; background-color: #1e90ff; color: white; font-size: 16px; cursor: pointer; transition: background 0.3s;">
+      Check Price
+    </button>
+  </form>
+
+  <h3 id="result" style="margin-top: 20px; color: #28a745;"></h3>
+
+</div>
+
+<script>
+document.getElementById("quoteForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+
+  const item = document.getElementById("item").value;
+  const brand = document.getElementById("brand").value;
+
+  const res = await fetch("http://localhost:2020/webhook-test/quote", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ item: item, brand: brand })
+  });
+
+  const data = await res.json();
+
+  document.getElementById("result").innerText =
+    "Customer Price: $" + data.markupPrice;
+});
+</script>
+
+</body>
+</html>
