@@ -599,134 +599,281 @@
   </div>
 
 <script>
-const WEBHOOK_URL = "YOUR_N8N_WEBHOOK_URL"; // <-- replace this
+  /** 
+   * CONSTANTS & HELPERS 
+   */
+  const MARKUP = 1.5; 
+  const WEBHOOK_URL = 'https://conferential-heide-fuggily.ngrok-free.dev';
 
-let selectedProduct = null;
+  const parseNumericPrice = val => {
+    if (typeof val === 'number') return val;
+    if (!val) return null;
+    // Remove currency symbols, commas, and non-numeric chars except decimal
+    const cleaned = String(val).replace(/[^0-9.]/g, '');
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? null : num;
+  };
 
-// Call backend
-async function searchProducts(item, brand) {
-  try {
-    const response = await fetch(WEBHOOK_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        item: item,
-        brand: brand
-      })
-    });
+  const applyMarkup = priceVal => {
+    const numeric = parseNumericPrice(priceVal);
+    return (numeric !== null) ? (numeric * MARKUP).toFixed(2) : null;
+  };
 
-    const data = await response.json();
+  const getStarRating = rating => {
+    if (!rating || isNaN(rating)) return '—';
+    const num = parseFloat(rating);
+    const full = Math.round(num);
+    return '★'.repeat(full) + '☆'.repeat(Math.max(0, 5 - full)) + ` ${num}`;
+  };
 
-    if (!Array.isArray(data) || data.length === 0) {
-      renderEmpty();
+  const esc = str => {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  };
+
+  /** 
+   * STATE 
+   */
+  let products = [];
+  let selectedProduct = null;
+
+  /** 
+   * DOM ELEMENTS 
+   */
+  const elements = {
+    form:           document.getElementById('quoteForm'),
+    searchBtn:      document.getElementById('searchBtn'),
+    spinner:        document.getElementById('spinner'),
+    btnLabel:       document.getElementById('btnLabel'),
+    statusMsg:      document.getElementById('statusMsg'),
+    section:        document.getElementById('resultsSection'),
+    tbody:          document.getElementById('resultsBody'),
+    countEl:        document.getElementById('resultsCount'),
+    backdrop:       document.getElementById('modalBackdrop'),
+    modal:          document.getElementById('modal'),
+    modalClose:     document.getElementById('modalClose'),
+    modalImg:       document.getElementById('modalImg'),
+    modalName:      document.getElementById('modalName'),
+    modalGrid:      document.getElementById('modalGrid'),
+    modalDelivery:  document.getElementById('modalDelivery'),
+    modalLink:      document.getElementById('modalLink'),
+    selBar:         document.getElementById('selectionBar'),
+    selName:        document.getElementById('selName'),
+    clearBtn:       document.getElementById('clearSelection'),
+    itemInput:      document.getElementById('item'),
+    brandInput:     document.getElementById('brand')
+  };
+
+  /** 
+   * LOGIC 
+   */
+  const setLoading = (isLoading) => {
+    elements.searchBtn.disabled = isLoading;
+    elements.spinner.style.display = isLoading ? 'block' : 'none';
+    elements.btnLabel.textContent = isLoading ? 'Searching…' : 'Check Price';
+  };
+
+  const showStatus = (msg, isError = false) => {
+    elements.statusMsg.textContent = msg;
+    elements.statusMsg.className = 'status-msg' + (isError ? ' error' : '');
+  };
+
+  const clearUI = () => {
+    elements.tbody.innerHTML = '';
+    elements.section.style.display = 'none';
+    elements.selBar.classList.remove('visible');
+    selectedProduct = null;
+  };
+
+  const renderResults = (list) => {
+    elements.tbody.innerHTML = '';
+    
+    if (!list || list.length === 0) {
+      elements.tbody.innerHTML = `
+        <tr><td colspan="4">
+          <div class="empty-state">
+            <div class="icon">🔍</div>
+            <p>No products found. Try a different search.</p>
+          </div>
+        </td></tr>`;
+      elements.countEl.textContent = '0 products';
+      elements.section.style.display = 'block';
       return;
     }
 
-    renderTable(data);
+    elements.countEl.textContent = `${list.length} product${list.length !== 1 ? 's' : ''}`;
 
-  } catch (err) {
-    console.error("Search error:", err);
-    renderEmpty();
-  }
-}
+    list.forEach((p, i) => {
+      const markedUpPrice = applyMarkup(p.price);
+      const tr = document.createElement('tr');
+      tr.dataset.index = i;
 
-// Render table
-function renderTable(products) {
-  const tbody = document.querySelector("#resultsTable tbody");
-  tbody.innerHTML = "";
+      tr.innerHTML = `
+        <td class="thumb-cell">
+          <div class="thumb-wrap">
+            ${p.image_url
+              ? `<img src="${esc(p.image_url)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<span class=thumb-fallback>📦</span>'">`
+              : `<span class="thumb-fallback">📦</span>`}
+          </div>
+        </td>
+        <td>
+          <div class="product-name">${esc(p.name || 'Unknown Product')}</div>
+          ${p.brand ? `<div class="product-brand">${esc(p.brand)}</div>` : ''}
+        </td>
+        <td>
+          ${p.rating
+            ? `<span class="stars">${getStarRating(p.rating)}</span>`
+            : `<span style="color:var(--muted);font-size:13px">—</span>`}
+        </td>
+        <td class="price-cell">
+          ${markedUpPrice !== null
+            ? `$${markedUpPrice}`
+            : `<span class="price-null">N/A</span>`}
+        </td>
+      `;
 
-  const MARKUP = 1.5;
+      tr.addEventListener('click', () => {
+        selectRow(tr, i);
+        openModal(i);
+      });
 
-  products.forEach((p, index) => {
-    const tr = document.createElement("tr");
-
-    const price = p.price ? (p.price * MARKUP).toFixed(2) : "N/A";
-
-    tr.innerHTML = `
-      <td>
-        <img src="${p.image_url || ''}" 
-             onerror="this.src='https://via.placeholder.com/50'"
-             style="width:50px;height:50px;object-fit:contain;">
-      </td>
-      <td>${escapeHtml(p.name)}</td>
-      <td>$${price}</td>
-    `;
-
-    tr.addEventListener("click", () => {
-      selectRow(tr);
-      showDetails(p);
+      elements.tbody.appendChild(tr);
     });
 
-    tbody.appendChild(tr);
-  });
-}
-
-// Row selection
-function selectRow(row) {
-  document.querySelectorAll("#resultsTable tr")
-    .forEach(r => r.classList.remove("selected"));
-
-  row.classList.add("selected");
-}
-
-// Show modal/details
-function showDetails(p) {
-  const MARKUP = 1.5;
-  const price = p.price ? (p.price * MARKUP).toFixed(2) : "N/A";
-
-  const modal = document.getElementById("productModal");
-  modal.style.display = "block";
-
-  modal.innerHTML = `
-    <div class="modal-content">
-      <span class="close">&times;</span>
-      <img src="${p.image_url || ''}" style="max-width:200px;">
-      <h2>${escapeHtml(p.name)}</h2>
-      <p><strong>Brand:</strong> ${p.brand || "N/A"}</p>
-      <p><strong>Price:</strong> $${price}</p>
-      <p><strong>Rating:</strong> ${p.rating || "N/A"}</p>
-      <p><strong>Reviews:</strong> ${p.review_count || 0}</p>
-      <p><strong>Delivery:</strong> ${(p.delivery_info || []).join(", ")}</p>
-      ${p.sponsored ? "<p><strong>Sponsored</strong></p>" : ""}
-      <a href="${p.source_url}" target="_blank">View Product</a>
-    </div>
-  `;
-
-  modal.querySelector(".close").onclick = () => {
-    modal.style.display = "none";
+    elements.section.style.display = 'block';
   };
-}
 
-// Empty state
-function renderEmpty() {
-  const tbody = document.querySelector("#resultsTable tbody");
-  tbody.innerHTML = `
-    <tr>
-      <td colspan="3" style="text-align:center;">No results found</td>
-    </tr>
-  `;
-}
+  const selectRow = (tr, index) => {
+    const allRows = elements.tbody.querySelectorAll('tr');
+    allRows.forEach(r => r.classList.remove('selected'));
+    tr.classList.add('selected');
+    
+    selectedProduct = products[index];
+    elements.selName.textContent = selectedProduct.name || 'Product';
+    elements.selBar.classList.add('visible');
+  };
 
-// Basic XSS protection
-function escapeHtml(text) {
-  if (!text) return "";
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+  const openModal = (index) => {
+    const p = products[index];
+    if (!p) return;
 
-// Hook to your form
-document.getElementById("searchForm").addEventListener("submit", (e) => {
-  e.preventDefault();
+    const markedUpPrice = applyMarkup(p.price);
 
-  const item = document.getElementById("itemInput").value;
-  const brand = document.getElementById("brandInput").value;
+    // Image
+    if (p.image_url) {
+      elements.modalImg.innerHTML = `<img src="${esc(p.image_url)}" alt="" onerror="this.parentElement.innerHTML='📦'">`;
+    } else {
+      elements.modalImg.innerHTML = '📦';
+    }
 
-  searchProducts(item, brand);
-});
+    elements.modalName.textContent = p.name || 'Unknown Product';
+
+    // Info Grid
+    const details = [
+      { label: 'Price', value: markedUpPrice !== null ? `$${markedUpPrice}` : 'N/A', cls: markedUpPrice ? 'price-highlight' : '' },
+      { label: 'Brand', value: p.brand || '—' },
+      { label: 'Rating', value: p.rating ? getStarRating(p.rating) : '—', isRaw: true },
+      { label: 'Reviews', value: p.review_count ? parseInt(p.review_count).toLocaleString() : '—' },
+      { label: 'Sponsored', value: p.sponsored ? '⚡ Yes' : 'No', cls: p.sponsored ? 'sponsored-badge' : '' },
+    ];
+
+    elements.modalGrid.innerHTML = details.map(d => `
+      <div class="detail-item">
+        <span class="detail-label">${d.label}</span>
+        <span class="detail-value ${d.cls || ''}">${d.isRaw ? `<span class="stars">${d.value}</span>` : esc(String(d.value))}</span>
+      </div>
+    `).join('');
+
+    // Delivery
+    if (p.delivery_info && Array.isArray(p.delivery_info) && p.delivery_info.length > 0) {
+      elements.modalDelivery.innerHTML = `
+        <div class="modal-delivery" style="margin:0 24px 8px">
+          <span class="detail-label">Delivery</span>
+          <ul>${p.delivery_info.map(d => `<li>${esc(d)}</li>`).join('')}</ul>
+        </div>`;
+    } else {
+      elements.modalDelivery.innerHTML = '';
+    }
+
+    // Amazon Link
+    if (p.source_url) {
+      elements.modalLink.href = p.source_url;
+      elements.modalLink.style.pointerEvents = 'auto';
+      elements.modalLink.style.opacity = '1';
+    } else {
+      elements.modalLink.href = '#';
+      elements.modalLink.style.pointerEvents = 'none';
+      elements.modalLink.style.opacity = '0.4';
+    }
+
+    elements.backdrop.classList.add('open');
+  };
+
+  const closeModal = () => {
+    elements.backdrop.classList.remove('open');
+  };
+
+  /** 
+   * EVENT LISTENERS 
+   */
+  elements.form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const item = elements.itemInput.value.trim();
+    const brand = elements.brandInput.value.trim();
+
+    if (!item) {
+      showStatus('Please enter an item name.', true);
+      return;
+    }
+
+    setLoading(true);
+    showStatus('Searching Amazon...');
+    clearUI();
+
+    try {
+      const response = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item, brand })
+      });
+
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      
+      const data = await response.json();
+      products = Array.isArray(data) ? data : [];
+      
+      renderResults(products);
+      showStatus('');
+    } catch (err) {
+      console.error(err);
+      showStatus('Failed to fetch results. Please try again.', true);
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  elements.modalClose.addEventListener('click', closeModal);
+  elements.backdrop.addEventListener('click', (e) => {
+    if (e.target === elements.backdrop) closeModal();
+  });
+
+  elements.clearBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const allRows = elements.tbody.querySelectorAll('tr');
+    allRows.forEach(r => r.classList.remove('selected'));
+    elements.selBar.classList.remove('visible');
+    selectedProduct = null;
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
+  });
+
 </script>
 </body>
 </html>
