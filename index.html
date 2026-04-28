@@ -599,232 +599,134 @@
   </div>
 
 <script>
-  const MARKUP = 1.5; // 50% markup
+const WEBHOOK_URL = "YOUR_N8N_WEBHOOK_URL"; // <-- replace this
 
-  const applyMarkup = price =>
-    (price !== null && price !== undefined && !isNaN(price))
-      ? (price * MARKUP).toFixed(2)
-      : null;
+let selectedProduct = null;
 
-  const stars = rating => {
-    if (!rating) return '—';
-    const full = Math.round(rating);
-    return '★'.repeat(full) + '☆'.repeat(Math.max(0, 5 - full)) + ` ${rating}`;
-  };
-
-  let selectedProduct = null;
-  let products = [];
-
-  const form       = document.getElementById('quoteForm');
-  const searchBtn  = document.getElementById('searchBtn');
-  const spinner    = document.getElementById('spinner');
-  const btnLabel   = document.getElementById('btnLabel');
-  const statusMsg  = document.getElementById('statusMsg');
-  const section    = document.getElementById('resultsSection');
-  const tbody      = document.getElementById('resultsBody');
-  const countEl    = document.getElementById('resultsCount');
-  const backdrop   = document.getElementById('modalBackdrop');
-  const modalClose = document.getElementById('modalClose');
-  const selBar     = document.getElementById('selectionBar');
-  const selName    = document.getElementById('selName');
-  const clearBtn   = document.getElementById('clearSelection');
-
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    const item  = document.getElementById('item').value.trim();
-    const brand = document.getElementById('brand').value.trim();
-
-    if (!item) {
-      showStatus('Please enter an item name.', true);
-      return;
-    }
-
-    setLoading(true);
-    showStatus('Searching Amazon...');
-    clearResults();
-
-    try {
-      const res = await fetch('https://conferential-heide-fuggily.ngrok-free.dev', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item, brand })
-      });
-
-      if (!res.ok) throw new Error(`Server error: ${res.status}`);
-      const data = await res.json();
-      products = Array.isArray(data) ? data : [];
-      renderResults(products);
-      showStatus('');
-    } catch (err) {
-      showStatus('Failed to fetch results. Check your connection.', true);
-    } finally {
-      setLoading(false);
-    }
-  });
-
-  function setLoading(on) {
-    searchBtn.disabled = on;
-    spinner.style.display = on ? 'block' : 'none';
-    btnLabel.textContent = on ? 'Searching…' : 'Check Price';
-  }
-
-  function showStatus(msg, isError = false) {
-    statusMsg.textContent = msg;
-    statusMsg.className = 'status-msg' + (isError ? ' error' : '');
-  }
-
-  function clearResults() {
-    tbody.innerHTML = '';
-    section.style.display = 'none';
-    selectedProduct = null;
-    selBar.classList.remove('visible');
-  }
-
-  function renderResults(list) {
-    if (!list.length) {
-      tbody.innerHTML = `
-        <tr><td colspan="4">
-          <div class="empty-state">
-            <div class="icon">🔍</div>
-            <p>No products found. Try a different search.</p>
-          </div>
-        </td></tr>`;
-      countEl.textContent = '0 products';
-      section.style.display = 'block';
-      return;
-    }
-
-    countEl.textContent = `${list.length} product${list.length !== 1 ? 's' : ''}`;
-    tbody.innerHTML = '';
-
-    list.forEach((p, i) => {
-      const markedUp = applyMarkup(p.price);
-      const tr = document.createElement('tr');
-      tr.dataset.index = i;
-
-      tr.innerHTML = `
-        <td class="thumb-cell">
-          <div class="thumb-wrap">
-            ${p.image_url
-              ? `<img src="${esc(p.image_url)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<span class=thumb-fallback>📦</span>'">`
-              : `<span class="thumb-fallback">📦</span>`}
-          </div>
-        </td>
-        <td>
-          <div class="product-name">${esc(p.name || 'Unknown Product')}</div>
-          ${p.brand ? `<div class="product-brand">${esc(p.brand)}</div>` : ''}
-        </td>
-        <td>
-          ${p.rating
-            ? `<span class="stars">${stars(p.rating)}</span>`
-            : `<span style="color:var(--muted);font-size:13px">—</span>`}
-        </td>
-        <td class="price-cell">
-          ${markedUp !== null
-            ? `$${markedUp}`
-            : `<span class="price-null">N/A</span>`}
-        </td>
-      `;
-
-      tr.addEventListener('click', () => {
-        openModal(i);
-        selectRow(tr, i);
-      });
-
-      tbody.appendChild(tr);
+// Call backend
+async function searchProducts(item, brand) {
+  try {
+    const response = await fetch(WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        item: item,
+        brand: brand
+      })
     });
 
-    section.style.display = 'block';
-  }
+    const data = await response.json();
 
-  function selectRow(tr, index) {
-    document.querySelectorAll('#resultsBody tr').forEach(r => r.classList.remove('selected'));
-    tr.classList.add('selected');
-    selectedProduct = products[index];
-    selName.textContent = selectedProduct.name || 'Product';
-    selBar.classList.add('visible');
-  }
+    if (!Array.isArray(data) || data.length === 0) {
+      renderEmpty();
+      return;
+    }
 
-  clearBtn.addEventListener('click', () => {
-    document.querySelectorAll('#resultsBody tr').forEach(r => r.classList.remove('selected'));
-    selectedProduct = null;
-    selBar.classList.remove('visible');
+    renderTable(data);
+
+  } catch (err) {
+    console.error("Search error:", err);
+    renderEmpty();
+  }
+}
+
+// Render table
+function renderTable(products) {
+  const tbody = document.querySelector("#resultsTable tbody");
+  tbody.innerHTML = "";
+
+  const MARKUP = 1.5;
+
+  products.forEach((p, index) => {
+    const tr = document.createElement("tr");
+
+    const price = p.price ? (p.price * MARKUP).toFixed(2) : "N/A";
+
+    tr.innerHTML = `
+      <td>
+        <img src="${p.image_url || ''}" 
+             onerror="this.src='https://via.placeholder.com/50'"
+             style="width:50px;height:50px;object-fit:contain;">
+      </td>
+      <td>${escapeHtml(p.name)}</td>
+      <td>$${price}</td>
+    `;
+
+    tr.addEventListener("click", () => {
+      selectRow(tr);
+      showDetails(p);
+    });
+
+    tbody.appendChild(tr);
   });
+}
 
-  function openModal(index) {
-    const p = products[index];
-    const markedUp = applyMarkup(p.price);
+// Row selection
+function selectRow(row) {
+  document.querySelectorAll("#resultsTable tr")
+    .forEach(r => r.classList.remove("selected"));
 
-    // Image
-    const modalImgEl = document.getElementById('modalImg');
-    if (p.image_url) {
-      modalImgEl.innerHTML = `<img src="${esc(p.image_url)}" alt="" onerror="this.parentElement.innerHTML='📦'">`;
-    } else {
-      modalImgEl.innerHTML = '📦';
-    }
+  row.classList.add("selected");
+}
 
-    document.getElementById('modalName').textContent = p.name || 'Unknown Product';
+// Show modal/details
+function showDetails(p) {
+  const MARKUP = 1.5;
+  const price = p.price ? (p.price * MARKUP).toFixed(2) : "N/A";
 
-    // Grid
-    const grid = document.getElementById('modalGrid');
-    const details = [
-      { label: 'Price', value: markedUp !== null ? `$${markedUp}` : 'N/A', cls: markedUp ? 'price-highlight' : '' },
-      { label: 'Brand',  value: p.brand || '—' },
-      { label: 'Rating', value: p.rating ? `${stars(p.rating)}` : '—', raw: true },
-      { label: 'Reviews', value: p.review_count ? p.review_count.toLocaleString() : '—' },
-      { label: 'Sponsored', value: p.sponsored ? '⚡ Yes' : 'No', cls: p.sponsored ? 'sponsored-badge' : '' },
-    ];
+  const modal = document.getElementById("productModal");
+  modal.style.display = "block";
 
-    grid.innerHTML = details.map(d => `
-      <div class="detail-item">
-        <span class="detail-label">${d.label}</span>
-        <span class="detail-value ${d.cls || ''}">${d.raw ? `<span class="stars">${d.value}</span>` : esc(String(d.value))}</span>
-      </div>
-    `).join('');
+  modal.innerHTML = `
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <img src="${p.image_url || ''}" style="max-width:200px;">
+      <h2>${escapeHtml(p.name)}</h2>
+      <p><strong>Brand:</strong> ${p.brand || "N/A"}</p>
+      <p><strong>Price:</strong> $${price}</p>
+      <p><strong>Rating:</strong> ${p.rating || "N/A"}</p>
+      <p><strong>Reviews:</strong> ${p.review_count || 0}</p>
+      <p><strong>Delivery:</strong> ${(p.delivery_info || []).join(", ")}</p>
+      ${p.sponsored ? "<p><strong>Sponsored</strong></p>" : ""}
+      <a href="${p.source_url}" target="_blank">View Product</a>
+    </div>
+  `;
 
-    // Delivery
-    const delivEl = document.getElementById('modalDelivery');
-    if (p.delivery_info && p.delivery_info.length) {
-      delivEl.innerHTML = `
-        <div class="modal-delivery" style="margin:0 24px 8px">
-          <span class="detail-label">Delivery</span>
-          <ul>${p.delivery_info.map(d => `<li>${esc(d)}</li>`).join('')}</ul>
-        </div>`;
-    } else {
-      delivEl.innerHTML = '';
-    }
+  modal.querySelector(".close").onclick = () => {
+    modal.style.display = "none";
+  };
+}
 
-    // Link
-    const link = document.getElementById('modalLink');
-    if (p.source_url) {
-      link.href = p.source_url;
-      link.style.pointerEvents = '';
-      link.style.opacity = '';
-    } else {
-      link.href = '#';
-      link.style.pointerEvents = 'none';
-      link.style.opacity = '0.4';
-    }
+// Empty state
+function renderEmpty() {
+  const tbody = document.querySelector("#resultsTable tbody");
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="3" style="text-align:center;">No results found</td>
+    </tr>
+  `;
+}
 
-    backdrop.classList.add('open');
-  }
+// Basic XSS protection
+function escapeHtml(text) {
+  if (!text) return "";
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
-  modalClose.addEventListener('click', closeModal);
-  backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+// Hook to your form
+document.getElementById("searchForm").addEventListener("submit", (e) => {
+  e.preventDefault();
 
-  function closeModal() {
-    backdrop.classList.remove('open');
-  }
+  const item = document.getElementById("itemInput").value;
+  const brand = document.getElementById("brandInput").value;
 
-  function esc(str) {
-    return String(str)
-      .replace(/&/g,'&amp;')
-      .replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;')
-      .replace(/'/g,'&#39;');
-  }
+  searchProducts(item, brand);
+});
 </script>
 </body>
 </html>
