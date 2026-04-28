@@ -603,7 +603,7 @@
    * CONSTANTS & HELPERS 
    */
   const MARKUP = 1.5; 
-  const WEBHOOK_URL = 'https://conferential-heide-fuggily.ngrok-free.dev';
+  
 
   const parseNumericPrice = val => {
     if (typeof val === 'number') return val;
@@ -836,7 +836,7 @@
     clearUI();
 
     try {
-      const response = await fetch(WEBHOOK_URL, {
+      const response = await fetch('https://conferential-heide-fuggily.ngrok-free.dev', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ item, brand })
