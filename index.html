@@ -25,11 +25,14 @@ document.getElementById("quoteForm").addEventListener("submit", async function(e
   const item = document.getElementById("item").value;
   const brand = document.getElementById("brand").value;
 
-  const res = await fetch("https://conferential-heide-fuggily.ngrok-free.dev", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ item: item, brand: brand })
-  });
+ const res = await fetch("https://conferential-heide-fuggily.ngrok-free.dev", {
+  method: "POST",
+  headers: { 
+    "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "69420"
+  },
+  body: JSON.stringify({ item: item, brand: brand })
+});
 
   const data = await res.json();
 
